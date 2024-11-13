@@ -1,6 +1,6 @@
 {
     "manufacturer": "Jenson",
-    "keyboard_name": "my_rp2040",
+    "keyboard_name": "ergodox_white",
     "maintainer": "Jenson",
     "bootloader": "rp2040",
     "diode_direction": "COL2ROW",
@@ -30,3 +30,4 @@
 
     }
 }
+
