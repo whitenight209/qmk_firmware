@@ -13,12 +13,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "quantum.h"
 #include QMK_KEYBOARD_H
 #include "print.h"
 // Defines names for use in layer keycodes and the keymap
 
 #define XXX KC_NO
 
+bool mouse_loop_running = false;
 
 enum layer_names {
     MACOS,  // default layer
@@ -31,10 +33,9 @@ enum layer_names {
 
 // Defines the keycodes used by our macros in process_record_user
 enum custom_keycodes {
-    QMKBEST = SAFE_RANGE,
-    QMKURL,
-//    MOD_MAC_FUNC = MO(MAC_FUNC),
-    MOD_FUNC = SAFE_RANGE,
+    FUNC_KEY = SAFE_RANGE,
+    MOD_FUNC,
+    MOUSE_LOOP
 };
 
 enum tab_dances {
@@ -71,19 +72,19 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
       KC_TAB,             KC_Q,     KC_W,     KC_E,     KC_R,    KC_T,  KC_DEL,             KC_QUOTE,         KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_EQL,
       KC_CAPS,            KC_A,     KC_S,     KC_D,     KC_F,    KC_G,  KC_GRV,             KC_DOUBLE_QUOTE,  KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN,  MO(SYMB),
       KC_LSFT,            KC_Z,     KC_X,     KC_C,     KC_V,    KC_B,                                        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_RSFT,
-      KC_LCTL,            KC_SLEP,  KC_TRNS,  KC_LALT,  MO(SYMB),                                             KC_LEFT, KC_UP,   KC_DOWN, KC_RGHT, KC_BSLS,
-                                                                 KC_DEL,  KC_LGUI,            TG(SYMB),  KC_DOUBLE_QUOTE,
+      KC_LCTL,            KC_TRNS,  KC_TRNS,  KC_LALT,  FUNC_KEY,                                             KC_LEFT, KC_UP,   KC_DOWN, KC_RGHT, KC_BSLS,
+                                                                 KC_SLEP,  KC_LGUI,       TG(SYMB),  KC_DOUBLE_QUOTE,
                                                                  KC_HOME,                     KC_PGUP,
-                                                                 KC_BSPC, KC_LGUI, MO(SYMB),  KC_PGDN,   KC_ENT, KC_SPC
+                                                                 KC_BSPC, KC_LGUI, MO(SYMB),  KC_PGDN, KC_ENT, KC_SPC
     ),
     [LOST_ARK] = LAYOUT(
           // left hand
           KC_ESC,             KC_1,     KC_2,     KC_3,     KC_4,    KC_5,    KC_TRNS,            TG(LOST_ARK),     KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     KC_MINS,
           KC_TAB,             KC_Q,     KC_W,     KC_E,     KC_R,    KC_T,    KC_DEL,             KC_QUOTE,         KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_EQL,
-          LT(SYMB, KC_LNG1),  KC_A,     KC_S,     KC_D,    KC_F,    KC_G,     KC_GRV,             KC_DOUBLE_QUOTE,  KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN,  MO(SYMB),
+          KC_LNG1,            KC_A,     KC_S,     KC_D,     KC_F,    KC_G,    KC_GRV,             KC_DOUBLE_QUOTE,  KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN,  MO(SYMB),
           KC_LSFT,            KC_Z,     KC_X,     KC_C,     KC_V,    KC_B,                                          KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_RSFT,
-          KC_LCTL,            KC_QUOT,  KC_TRNS,  KC_LALT,  MOD_FUNC,                                                KC_LEFT, KC_UP,   KC_DOWN, KC_RGHT, KC_BSLS,
-                                                                     KC_DEL,  KC_LGUI,            TG(SYMB), KC_DOUBLE_QUOTE,
+          KC_LCTL,            KC_QUOT,  KC_TRNS,  KC_LALT,  FUNC_KEY,                                               KC_LEFT, KC_UP,   KC_DOWN, KC_RGHT, KC_BSLS,
+                                                                     KC_DEL,  MOUSE_LOOP,         TG(SYMB), KC_DOUBLE_QUOTE,
                                                                      KC_HOME,                     KC_PGUP,
                                                                      KC_BSPC, KC_SPC, MO(SYMB),   KC_PGDN, KC_ENT, KC_SPC
     ),
@@ -190,15 +191,18 @@ tap_dance_action_t tap_dance_actions[] = {
 };
 
 bool is_activate_mod_pressed = false;
+bool is_func_key_pressed = false;
 bool is_tap_pressed = false;
 bool is_mod_pair_key_pressed = false;
 bool is_mac_magnet_layer_activated = false;
 void keyboard_post_init_user(void) {
   // Customise these values to desired behaviour
-  debug_enable=true;
+//  debug_enable=true;
 //  debug_matrix=true;
-  debug_keyboard=true;
+//  debug_keyboard=true;
 //  debug_mouse=true;
+    setPinOutput(LED_INDICATOR_PIN);
+    writePin(LED_INDICATOR_PIN, LED_PIN_ON_STATE); // led on init
 }
 void check_mod_layer_activated(void) {
 //    uprintf("%d, %d, %d \n", is_activate_mod_pressed, is_tap_pressed, is_mac_magnet_layer_activated);
@@ -225,6 +229,17 @@ void update_pair_key_state_false(void) {
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   bool return_val = true;
   switch (keycode) {
+        case FUNC_KEY:
+            if (record->event.pressed) {
+                uprintf("func key pressed!\n");
+                is_func_key_pressed = true;
+                layer_on(SYMB);
+            } else {
+                uprintf("mod released!\n");
+                is_func_key_pressed = false;
+                layer_off(SYMB);
+            }
+            return false;
         case KC_TAB:
             if (record->event.pressed) {
                 uprintf("KC_TAB pressed!\n");
@@ -251,10 +266,57 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 layer_off(MAC_FUNC);
             }
             break;
+        case MOUSE_LOOP:
+            if (record->event.pressed) {
+                // Toggle mouse loop state
+                mouse_loop_running = !mouse_loop_running;
+            }
+            break;
   }
   check_mod_layer_activated();
 //#ifdef CONSOLE_ENABLE
 //    uprintf("KL: kc: 0x%04X, col: %2u, row: %2u, pressed: %u, time: %5u, int: %u, count: %u\n", keycode, record->event.key.col, record->event.key.row, record->event.pressed, record->event.time, record->tap.interrupted, record->tap.count);
 //#endif
   return return_val;
+}
+
+layer_state_t layer_state_set_user(layer_state_t state) {
+//    uprintf("function0 active: %s\n", layer_state_is(1) ? "true" : "false");
+//    uprintf("function1 active: %s\n", layer_state_is(LOST_ARK) ? "true" : "false");
+//    uprintf("function2 active: %s\n", layer_state_cmp(state, LOST_ARK) ? "true" : "false");
+//    uprintf("function3 active: %s\n", layer_state_cmp(state, 1) ? "true" : "false");
+    if (layer_state_cmp(state, LOST_ARK)) { // Replace '1' with your specific layer index
+//        uprintf("layer is true\n");
+        writePin(LED_INDICATOR_PIN, !LED_PIN_ON_STATE); // Turn LED OFF
+    } else {
+//        uprintf("layer is false\n");
+        writePin(LED_INDICATOR_PIN, LED_PIN_ON_STATE); // Turn LED ON
+    }
+    return state;
+}
+
+
+void matrix_scan_user(void) {
+    // Run mouse movement if the flag is set
+    if (mouse_loop_running) {
+        static uint16_t last_run = 0;
+        if (timer_elapsed(last_run) > 50) {
+            // Move mouse diagonally right-down
+            report_mouse_t mouse_report = { .x = 10, .y = 10 };
+            host_mouse_send(&mouse_report);
+
+            wait_ms(5000);
+
+            // Move mouse diagonally left-up
+            mouse_report.x = -10;
+            mouse_report.y = -10;
+            host_mouse_send(&mouse_report);
+            // Update the timer
+            last_run = timer_read();
+        }
+    } else {
+        // Stop mouse movement when the loop is disabled
+        report_mouse_t mouse_stop = {0};
+        host_mouse_send(&mouse_stop);
+    }
 }
